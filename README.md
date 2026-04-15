@@ -21,15 +21,18 @@ npm install
 Crea las bases de datos en PostgreSQL:
 
 ```sql
-CREATE USER movie_user WITH PASSWORD '123456';
+CREATE USER movies_user WITH PASSWORD '123456';
 
-CREATE DATABASE movies_api OWNER movie_user;
-CREATE DATABASE movies_api_test OWNER movie_user;
+CREATE DATABASE movies_api OWNER movies_user;
+CREATE DATABASE movies_api_test OWNER movies_user;
+
+GRANT ALL PRIVILEGES ON DATABASE movies_api TO movies_user;
+GRANT ALL PRIVILEGES ON DATABASE movies_api_test TO movies_user;
 ```
 
 ### 3. Configurar variables de entorno
 
-El proyecto incluye dos archivos de entorno listos para usar:
+El proyecto incluye dos archivos de entorno de ejemplo que debes modificar a:
 
 - `.env` — para el entorno de desarrollo/producción
 - `.env.test` — para el entorno de pruebas
@@ -39,7 +42,7 @@ Contenido esperado de `.env`:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_USERNAME=movie_user
+DB_USERNAME=movies_user
 DB_PASSWORD=123456
 DB_NAME=movies_api
 ```
@@ -49,7 +52,7 @@ Contenido esperado de `.env.test`:
 ```env
 DB_HOST=localhost
 DB_PORT=5432
-DB_USERNAME=movie_user
+DB_USERNAME=movies_user
 DB_PASSWORD=123456
 DB_NAME=movies_api_test
 ```
