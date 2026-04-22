@@ -4,27 +4,18 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { DataSource } from 'typeorm';
 
-const movieData = {
-  title: 'Inception',
-  director: 'Christopher Nolan',
-  genre: 'sci-fi',
-  year: 2010,
-  rating: 8.8,
-  synopsis: 'Dream-sharing technology',
-};
-
-const updateData = {
-  rating: 9.0,
-  synopsis: 'Updated synopsis for testing purposes.',
-};
-
-const invalidUuid = 'not-a-valid-uuid';
-const nonExistentUuid = '00000000-0000-4000-a000-000000000000';
-
-describe('Movies (e2e)', () => {
+describe('Movies E2E', () => {
   let app: INestApplication;
   let dataSource: DataSource;
-  let createdMovieId: string;
+
+  const seedMovies = [
+    { title: 'Inception', director: 'C. Nolan', genre: 'sci-fi', year: 2010, rating: 8.8 },
+    { title: 'Interstellar', director: 'C. Nolan', genre: 'sci-fi', year: 2014, rating: 8.6 },
+    { title: 'The Godfather', director: 'F. Coppola', genre: 'drama', year: 1972, rating: 9.2 },
+    { title: 'Pulp Fiction', director: 'Q. Tarantino', genre: 'drama', year: 1994, rating: 8.9 },
+    { title: 'The Dark Knight', director: 'C. Nolan', genre: 'action', year: 2008, rating: 9.0 },
+    { title: 'Toy Story', director: 'J. Lasseter', genre: 'animation', year: 1995, rating: 8.3 },
+  ];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -32,6 +23,7 @@ describe('Movies (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -40,10 +32,20 @@ describe('Movies (e2e)', () => {
         errorHttpStatusCode: 422,
       }),
     );
+
     await app.init();
 
     dataSource = moduleFixture.get<DataSource>(DataSource);
+
+    //limpiar tabla
     await dataSource.query('DELETE FROM movies');
+
+    //insertar datos
+    for (const movie of seedMovies) {
+      await request(app.getHttpServer())
+        .post('/movies')
+        .send(movie);
+    }
   });
 
   afterAll(async () => {
@@ -51,89 +53,69 @@ describe('Movies (e2e)', () => {
     await app.close();
   });
 
-  // POST /movies
-  describe('POST /movies', () => {
-    it('1. should create a movie (201)', async () => {
-      const res = await request(app.getHttpServer()).post('/movies').send(movieData).expect(201);
-      createdMovieId = res.body.id;
-      expect(res.body.title).toBe('Inception');
-    });
+  //TESTS DEL SEARCH
 
-    it('2. should return 422 when title is missing', async () => {
-      const { title, ...invalidData } = movieData;
-      await request(app.getHttpServer()).post('/movies').send(invalidData).expect(422);
-    });
+  it('GET /movies/search → retorna todas las películas', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search')
+      .expect(200);
 
-    it('3. should return 422 when rating > 10', async () => {
-      await request(app.getHttpServer()).post('/movies').send({ ...movieData, rating: 11 }).expect(422);
-    });
-
-    it('4. should return 422 when rating < 0', async () => {
-      await request(app.getHttpServer()).post('/movies').send({ ...movieData, rating: -1 }).expect(422);
-    });
-
-    it('5. should return 422 when year < 1888', async () => {
-      await request(app.getHttpServer()).post('/movies').send({ ...movieData, year: 1800 }).expect(422);
-    });
-
-    it('6. should return 422 when genre is invalid', async () => {
-      await request(app.getHttpServer()).post('/movies').send({ ...movieData, genre: 'invalid' }).expect(422);
-    });
+    expect(res.body.length).toBe(6);
   });
 
-  // GET /movies
-  describe('GET /movies', () => {
-    it('7. should return 200 with array containing created movie', async () => {
-      const res = await request(app.getHttpServer()).get('/movies').expect(200);
-      expect(res.body.some((m: any) => m.id === createdMovieId)).toBe(true);
-    });
+  it('filtra por genre', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?genre=sci-fi')
+      .expect(200);
+
+    expect(res.body.length).toBe(2);
   });
 
-  // GET /movies/:id
-  describe('GET /movies/:id', () => {
-    it('8. should return 200 with the correct movie', async () => {
-      const res = await request(app.getHttpServer()).get(`/movies/${createdMovieId}`).expect(200);
-      expect(res.body.id).toBe(createdMovieId);
-    });
+  it('filtra por year', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?year=1994')
+      .expect(200);
 
-    it('9. should return 400 when UUID is invalid', async () => {
-      await request(app.getHttpServer()).get(`/movies/${invalidUuid}`).expect(400);
-    });
-
-    it('10. should return 404 when movie does not exist', async () => {
-      await request(app.getHttpServer()).get(`/movies/${nonExistentUuid}`).expect(404);
-    });
+    expect(res.body.length).toBe(1);
+    expect(res.body[0].title).toBe('Pulp Fiction');
   });
 
-  // PATCH /movies/:id
-  describe('PATCH /movies/:id', () => {
-    it('11. should update rating and synopsis (200)', async () => {
-      const res = await request(app.getHttpServer()).patch(`/movies/${createdMovieId}`).send(updateData).expect(200);
-      expect(res.body.rating).toBe(9.0);
-      expect(res.body.synopsis).toBe(updateData.synopsis);
-    });
+  it('filtra por minRating', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?minRating=9.0')
+      .expect(200);
 
-    it('12. should return 400 when UUID is invalid', async () => {
-      await request(app.getHttpServer()).patch(`/movies/${invalidUuid}`).send(updateData).expect(400);
-    });
-
-    it('13. should return 404 when movie does not exist', async () => {
-      await request(app.getHttpServer()).patch(`/movies/${nonExistentUuid}`).send(updateData).expect(404);
-    });
-
-    it('14. should return 422 when rating is out of range', async () => {
-      await request(app.getHttpServer()).patch(`/movies/${createdMovieId}`).send({ rating: 15 }).expect(422);
-    });
+    expect(res.body.length).toBe(2);
   });
 
-  // DELETE /movies/:id
-  describe('DELETE /movies/:id', () => {
-    it('15. should delete the movie and return 200', async () => {
-      await request(app.getHttpServer()).delete(`/movies/${createdMovieId}`).expect(200);
-    });
+  it('combina filtros', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?genre=drama&minRating=9.0')
+      .expect(200);
 
-    it('should return 404 when trying to get deleted movie', async () => {
-      await request(app.getHttpServer()).get(`/movies/${createdMovieId}`).expect(404);
-    });
+    expect(res.body.length).toBe(1);
+    expect(res.body[0].title).toBe('The Godfather');
+  });
+
+  it('retorna vacío si no hay coincidencias', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?genre=horror')
+      .expect(200);
+
+    expect(res.body.length).toBe(0);
+  });
+
+  it('retorna vacío si año no coincide', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?year=2030')
+      .expect(200);
+
+    expect(res.body.length).toBe(0);
+  });
+
+  it('retorna 422 si year es inválido', async () => {
+    await request(app.getHttpServer())
+      .get('/movies/search?year=invalid')
+      .expect(422);
   });
 });

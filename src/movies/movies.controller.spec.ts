@@ -11,6 +11,8 @@ const mockMoviesService = {
   findOne: jest.fn(),
   update: jest.fn(),
   remove: jest.fn(),
+  search: jest.fn(),
+
 };
 
 const movieData = {
@@ -167,4 +169,63 @@ describe('MoviesController (Integration)', () => {
     mockMoviesService.remove.mockImplementation(() => { throw new NotFoundException(); });
     await request(app.getHttpServer()).delete(`/movies/${nonExistentUuid}`).expect(404);
   });
+  // Sección C · Pruebas de integración del controller (20 pts)
+// GET /movies/search
+describe('GET /movies/search (Integration)', () => {
+  it('C1 → sin query params → 200 y service.search llamado con {}', async () => {
+    mockMoviesService.search = jest.fn().mockResolvedValue([mockMovie]);
+
+    const res = await request(app.getHttpServer()).get('/movies/search').expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(mockMoviesService.search).toHaveBeenCalledWith({});
+  });
+
+  it('C2 → genre=drama → 200 y service.search llamado con { genre: "drama" }', async () => {
+    mockMoviesService.search = jest.fn().mockResolvedValue([mockMovie]);
+
+    await request(app.getHttpServer()).get('/movies/search?genre=drama').expect(200);
+
+    expect(mockMoviesService.search).toHaveBeenCalledWith({ genre: 'drama' });
+  });
+
+  it('C3 → year=2010&minRating=8.5 → 200 y params como number', async () => {
+    mockMoviesService.search = jest.fn().mockResolvedValue([mockMovie]);
+
+    await request(app.getHttpServer())
+      .get('/movies/search?year=2010&minRating=8.5')
+      .expect(200);
+
+    expect(mockMoviesService.search).toHaveBeenCalledWith({
+      year: 2010,
+      minRating: 8.5,
+    });
+  });
+
+  it('C4 → genre=invalid → 422 con mensaje de error', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?genre=invalid')
+      .expect(422);
+
+    expect(res.body.message[0]).toContain('genre');
+  });
+
+  it('C5 → year=1500 → 422 con mensaje de error', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?year=1500')
+      .expect(422);
+
+    expect(res.body.message[0]).toContain('year');
+  });
+
+  it('C6 → minRating=11 → 422 con mensaje de error', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/movies/search?minRating=11')
+      .expect(422);
+
+    expect(res.body.message[0]).toContain('minRating');
+  });
 });
+});
+
+
