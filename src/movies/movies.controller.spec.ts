@@ -3,8 +3,7 @@ import { INestApplication, ValidationPipe, NotFoundException } from '@nestjs/com
 import request from 'supertest';
 import { MoviesController } from './movies.controller';
 import { MoviesService } from './movies.service';
-import { Genre } from './entities/movie.entity';
-import { Movie } from './entities/movie.entity';
+import { Genre, Movie } from './entities/movie.entity';
 
 const mockMoviesService = {
   create: jest.fn(),
@@ -20,7 +19,7 @@ const movieData = {
   genre: 'sci-fi',
   year: 2010,
   rating: 8.8,
-  synopsis: 'A thief who steals corporate secrets through the use of dream-sharing technology.',
+  synopsis: 'A thief who steals corporate secrets through dream-sharing technology.',
 };
 
 const mockMovie: Movie = {
@@ -30,12 +29,12 @@ const mockMovie: Movie = {
   genre: Genre.SCIFI,
   year: 2010,
   rating: 8.8,
-  synopsis: 'A thief who steals corporate secrets through the use of dream-sharing technology.',
+  synopsis: movieData.synopsis,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
 
-const validUuid = '550e8400-e29b-41d4-a716-446655440000';
+const validUuid = mockMovie.id;
 const invalidUuid = 'not-a-valid-uuid';
 const nonExistentUuid = '00000000-0000-4000-a000-000000000000';
 
@@ -71,5 +70,101 @@ describe('MoviesController (Integration)', () => {
     await app.close();
   });
 
-  // Aquí las pruebas
+  // POST /movies
+  it('Crea una película válida (201)', async () => {
+    mockMoviesService.create.mockResolvedValue(mockMovie);
+    const res = await request(app.getHttpServer()).post('/movies').send(movieData).expect(201);
+    expect(res.body).toHaveProperty('id');
+    expect(res.body.title).toBe('Inception');
+  });
+
+  it('Falta title → 422', async () => {
+    // Opción 1: crear el objeto sin title
+    const { title, ...invalidData } = movieData;
+
+    await request(app.getHttpServer())
+      .post('/movies')
+      .send(invalidData)
+      .expect(422);
+  });
+
+  it('Rating > 10 → 422', async () => {
+    await request(app.getHttpServer()).post('/movies').send({ ...movieData, rating: 11 }).expect(422);
+  });
+
+  it('Rating < 0 → 422', async () => {
+    await request(app.getHttpServer()).post('/movies').send({ ...movieData, rating: -1 }).expect(422);
+  });
+
+  it('Year < 1888 → 422', async () => {
+    await request(app.getHttpServer()).post('/movies').send({ ...movieData, year: 1800 }).expect(422);
+  });
+
+  it('Genre inválido → 422', async () => {
+    await request(app.getHttpServer()).post('/movies').send({ ...movieData, genre: 'invalid' }).expect(422);
+  });
+
+  // GET /movies
+  it('Retorna todas las películas (200)', async () => {
+    mockMoviesService.findAll.mockResolvedValue([mockMovie]);
+    const res = await request(app.getHttpServer()).get('/movies').expect(200);
+    expect(res.body.length).toBe(1);
+  });
+
+  it('No existen películas → []', async () => {
+    mockMoviesService.findAll.mockResolvedValue([]);
+    const res = await request(app.getHttpServer()).get('/movies').expect(200);
+    expect(res.body).toEqual([]);
+  });
+
+  // GET /movies/:id
+  it('UUID válido existente → 200', async () => {
+    mockMoviesService.findOne.mockResolvedValue(mockMovie);
+    const res = await request(app.getHttpServer()).get(`/movies/${validUuid}`).expect(200);
+    expect(res.body.id).toBe(validUuid);
+  });
+
+  it('UUID inválido → 400', async () => {
+    await request(app.getHttpServer()).get(`/movies/${invalidUuid}`).expect(400);
+  });
+
+  it('UUID válido inexistente → 404', async () => {
+    mockMoviesService.findOne.mockImplementation(() => { throw new NotFoundException(); });
+    await request(app.getHttpServer()).get(`/movies/${nonExistentUuid}`).expect(404);
+  });
+
+  // PATCH /movies/:id
+  it('Actualiza parcialmente con DTO válido → 200', async () => {
+    mockMoviesService.update.mockResolvedValue({ ...mockMovie, rating: 9.0 });
+    const res = await request(app.getHttpServer()).patch(`/movies/${validUuid}`).send({ rating: 9.0 }).expect(200);
+    expect(res.body.rating).toBe(9.0);
+  });
+
+  it('UUID inválido → 400', async () => {
+    await request(app.getHttpServer()).patch(`/movies/${invalidUuid}`).send({ rating: 9.0 }).expect(400);
+  });
+
+  it('UUID válido inexistente → 404', async () => {
+    mockMoviesService.update.mockImplementation(() => { throw new NotFoundException(); });
+    await request(app.getHttpServer()).patch(`/movies/${nonExistentUuid}`).send({ rating: 9.0 }).expect(404);
+  });
+
+  it('Rating fuera de rango → 422', async () => {
+    await request(app.getHttpServer()).patch(`/movies/${validUuid}`).send({ rating: 15 }).expect(422);
+  });
+
+  // DELETE /movies/:id
+  it('Elimina película existente → 200', async () => {
+    mockMoviesService.remove.mockResolvedValue(undefined);
+    await request(app.getHttpServer()).delete(`/movies/${validUuid}`).expect(200);
+  });
+
+  it('UUID inválido → 400', async () => {
+    await request(app.getHttpServer()).delete(`/movies/${invalidUuid}`).expect(400);
+  });
+
+  it('UUID válido inexistente → 404', async () => {
+    mockMoviesService.remove.mockImplementation(() => { throw new NotFoundException(); });
+    await request(app.getHttpServer()).delete(`/movies/${nonExistentUuid}`).expect(404);
+  });
 });

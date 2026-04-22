@@ -3,12 +3,13 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ObjectLiteral, Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { MoviesService } from './movies.service';
-import { Movie } from './entities/movie.entity';
-import { Genre } from './entities/movie.entity';
+import { Movie, Genre } from './entities/movie.entity';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 
-type MockRepository<T extends ObjectLiteral = any> = Partial<Record<keyof Repository<T>, jest.Mock>>;
+type MockRepository<T extends ObjectLiteral = any> = Partial<
+  Record<keyof Repository<T>, jest.Mock>
+>;
 
 const createMockRepository = <T extends ObjectLiteral = any>(): MockRepository<T> => ({
   create: jest.fn(),
@@ -25,7 +26,7 @@ const movieData: CreateMovieDto = {
   genre: Genre.SCIFI,
   year: 2010,
   rating: 8.8,
-  synopsis: 'A thief who steals corporate secrets through the use of dream-sharing technology.',
+  synopsis: 'A thief who steals corporate secrets through dream-sharing technology.',
 };
 
 const mockMovie: Movie = {
@@ -64,5 +65,112 @@ describe('MoviesService', () => {
     expect(service).toBeDefined();
   });
 
-  // Aquí las pruebas
+  describe('create', () => {
+    // Prueba 2
+    it('debe crear y retornar una película', async () => {
+      repository.create!.mockReturnValue(mockMovie);
+      repository.save!.mockResolvedValue(mockMovie);
+
+      const result = await service.create(movieData);
+
+      expect(repository.create).toHaveBeenCalledWith(movieData);
+      expect(repository.save).toHaveBeenCalledWith(mockMovie);
+      expect(result).toEqual(mockMovie);
+    });
+
+    // Prueba 3
+    it('debe asignar un UUID automáticamente', async () => {
+      repository.create!.mockReturnValue(mockMovie);
+      repository.save!.mockResolvedValue(mockMovie);
+
+      const result = await service.create(movieData);
+
+      expect(result.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      );
+    });
+  });
+
+  describe('findAll', () => {
+    // Prueba 4
+    it('retorna todas las películas', async () => {
+      repository.find!.mockResolvedValue([mockMovie]);
+
+      const result = await service.findAll();
+
+      expect(repository.find).toHaveBeenCalled();
+      expect(result).toEqual([mockMovie]);
+    });
+
+    // Prueba 5
+    it('retorna un array vacío cuando no existen películas', async () => {
+      repository.find!.mockResolvedValue([]);
+
+      const result = await service.findAll();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('findOne', () => {
+    // Prueba 6
+    it('retorna la película correspondiente a un UUID existente', async () => {
+      repository.findOneBy!.mockResolvedValue(mockMovie);
+
+      const result = await service.findOne(mockMovie.id);
+
+      expect(repository.findOneBy).toHaveBeenCalledWith({ id: mockMovie.id });
+      expect(result).toEqual(mockMovie);
+    });
+
+    // Prueba 7
+    it('lanza NotFoundException si el UUID no existe', async () => {
+      repository.findOneBy!.mockResolvedValue(null);
+
+      await expect(service.findOne('uuid-inexistente')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('update', () => {
+    // Prueba 8
+    it('actualiza los campos de una película existente', async () => {
+      const updateData: UpdateMovieDto = { rating: 9.0 };
+      repository.findOneBy!.mockResolvedValue(mockMovie);
+      repository.merge!.mockReturnValue({ ...mockMovie, ...updateData });
+      repository.save!.mockResolvedValue({ ...mockMovie, ...updateData });
+
+      const result = await service.update(mockMovie.id, updateData);
+
+      expect(repository.findOneBy).toHaveBeenCalledWith({ id: mockMovie.id });
+      expect(result.rating).toBe(9.0);
+    });
+
+    // Prueba 9
+    it('lanza NotFoundException si el UUID no existe al actualizar', async () => {
+      repository.findOneBy!.mockResolvedValue(null);
+
+      await expect(service.update('uuid-inexistente', {})).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('remove', () => {
+    // Prueba 10
+    it('elimina una película existente', async () => {
+      repository.findOneBy!.mockResolvedValue(mockMovie);
+      repository.remove!.mockResolvedValue(mockMovie);
+
+      const result = await service.remove(mockMovie.id);
+
+      expect(repository.findOneBy).toHaveBeenCalledWith({ id: mockMovie.id });
+      expect(repository.remove).toHaveBeenCalledWith(mockMovie);
+      expect(result).toBeUndefined();
+    });
+
+    // Prueba 11
+    it('lanza NotFoundException si el UUID no existe al eliminar', async () => {
+      repository.findOneBy!.mockResolvedValue(null);
+
+      await expect(service.remove('uuid-inexistente')).rejects.toThrow(NotFoundException);
+    });
+  });
 });
